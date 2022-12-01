@@ -14,6 +14,8 @@ options(mc.cores = 1)
 library(bayesplot)
 library(posterior)
 
+setwd("/Users/vilmatiainen/Documents/Aalto bsc/Year 3/BDA/BDA_project")
+
 multiplesheets <- function(fname) {
   
   # getting info about all excel sheets
@@ -79,15 +81,53 @@ landfilled_sd <- sd(all_data[1:6,'Materials landfilled'])
 hierarchical_slope_mean <- (recycled_slope + combusted_slope + landfilled_slope)/3
 hierarchical_sd_mean <- (recycled_sd + combusted_sd + landfilled_sd)/3
 
-data_list = list(
-  N = nrow(all_data),
-  J = ncol(all_data),
-  x = all_data['year'],
-  y = all_data[, 2:4],
+data_hierarchical = list(
+  N = nrow(all_data[7:15,]),
+  J = ncol(all_data[,2:4]),
+  x = all_data[7:15,'year'],
+  y = all_data[7:15, 2:4],
   xpred = 2019,
   sd_mean = hierarchical_sd_mean,
   slope_mean = hierarchical_slope_mean
 )
 
-fit_hierarchical <- stan(file = "Hierarchical_project.stan", data = data_list)
+data_separate = list(
+  N = nrow(all_data[7:15,]),
+  J = ncol(all_data[,2:4]),
+  x = all_data[7:15,'year'],
+  y = all_data[7:15, 2:4],
+  xpred = 2019,
+  alpha_mean = c(recycled_intercept, combusted_intercept, landfilled_intercept),
+  beta_mean = c(recycled_slope, combusted_slope, landfilled_slope)
+)
+
+fit_hierarchical <- stan(file = "Hierarchical_project.stan", data = data_hierarchical)
+fit_separate <- stan(file = "Separate_project.stan", data = data_separate)
 monitor(fit_hierarchical)
+
+for (i in 1:3) {
+  alpha <- paste('alpha[', as.character(i), ']', sep="")
+  beta <- paste('beta[', as.character(i), ']', sep="")
+  rhat_alpha <- posterior::rhat(extract_variable_matrix(fit_separate, alpha))
+  rhat_beta <- posterior::rhat(extract_variable_matrix(fit_separate, beta))
+  print(rhat_alpha)
+  print(rhat_beta)
+}
+
+#PSIS-LOO for separate model
+sep_loo <- rstan::loo(fit_separate)
+sep_elpd <- sep_loo$estimates[1,1]
+# Effective number of parameters:
+sep_p <- sep_loo$estimates[2,1]
+sep_elpd
+plot(sep_loo)
+
+#PSIS-LOO for hierarchical model
+hier_loo <- rstan::loo(fit_hierarchical)
+hier_elpd <- hier_loo$estimates[1,1]
+# Effective number of parameters:
+hier_p <- hier_loo$estimates[2,1]
+hier_elpd
+plot(hier_loo)
+
+
