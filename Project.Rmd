@@ -1,0 +1,259 @@
+---
+title: "BDA Project"
+author: "Anonymous"
+output:
+  pdf_document: null
+  toc: yes
+  html_document:
+    df_print: paged
+toc_depth: 1
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+# This chunk sets echo = TRUE as default, that is print all code.
+# knitr::opts_chunk$set can be used to set other notebook generation options, too.
+# include=FALSE inside curly brackets makes this block not be included in the pdf.
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Loaded packages
+
+```{r message=FALSE, warning=FALSE}
+#install.packages("readxl")
+#nstall.packages("DescTools")
+library(readxl)
+library(tidyr)
+library(DescTools)
+library(plyr)
+library(ggplot2)
+library(reshape2)
+library(rstan) 
+#library(cmdstanr)
+rstan_options(auto_write = TRUE)
+options(mc.cores = 1)
+# library(loo)
+library(bayesplot)
+library(posterior)
+library(knitr)
+```
+
+# Clean data
+
+```{r, results='hide'}
+setwd("/Users/vilmatiainen/Documents/Aalto bsc/Year 3/BDA/BDA_project")
+
+multiplesheets <- function(fname) {
+  
+  # getting info about all excel sheets
+  sheets <- readxl::excel_sheets(fname)
+  tibble <- lapply(sheets, function(x) readxl::read_excel(fname, sheet = x))
+  data_frame <- lapply(tibble, as.data.frame)
+  
+  # assigning names to data frames
+  names(data_frame) <- sheets
+  
+  init_df <<- data_frame
+}
+
+# specifying the path name
+path <- "/Users/vilmatiainen/Documents/Aalto bsc/Year 3/BDA/BDA_project/Materials_Municipal_Waste_Stream_1960_2018.xlsx"
+multiplesheets(path)
+
+# Dataframe for storing the textile data
+all_data <- data.frame(matrix(ncol = 0, nrow = 15))
+
+# Add the data to the dataframe
+for (name in names(init_df)) {
+  df <- init_df[name][[1]]
+  no_na <- drop_na(df)
+  row_df <- data.frame(no_na[,-1], row.names=no_na[,1])
+  new_df <- row_df[grep("Textiles", rownames(row_df)), ]
+  t_df <- t(new_df)
+  if (ncol(t_df) > 0) {
+    colnames(t_df) <- c(name)
+    all_data <<- cbind(all_data, t_df)
+  }
+}
+
+# Clean up row names
+rownames(all_data) <-gsub("X","",as.character(rownames(all_data)))
+
+all_data['year'] <- as.numeric(as.character(rownames(all_data)))
+all_data['Materials recycled-%'] <- (all_data['Materials recycled']/all_data['Materials generated'])*100
+all_data['Material combusted-%'] <- (all_data['Material combusted']/all_data['Materials generated'])*100
+all_data['Materials landfilled-%'] <- (all_data['Materials landfilled']/all_data['Materials generated'])*100
+
+rownames(all_data) <- NULL
+```
+
+# Plot data
+
+```{r data_plot, fig.height=4, fig.width=5, fig.cap="Data."}
+plot(x=all_data[['year']], y=all_data[['Material combusted']], type='l')
+
+```
+
+# Define prior parameters
+
+```{r}
+# Separate model:
+#Estimate intercept means:
+recycled_intercept <- 680000*0.001 #US population in year 0  times 1kg (0.001 tonnes) for clothing waste in a yera per person
+combusted_intercept <- 0
+landfilled_intercept <- 0
+alpha_mean = c(recycled_intercept, combusted_intercept, landfilled_intercept)
+
+#Estimate slope means:
+summary_2 <- summary(lm(`Materials recycled` ~ year, data=all_data[(1:6),]))
+recycled_slope <- summary_2$coefficients[2,1]
+
+summary_3 <- summary(lm(`Material combusted` ~ year, data=all_data[(1:6),]))
+combusted_slope <- summary_3$coefficients[2,1]
+
+summary_4 <- summary(lm(`Materials landfilled` ~ year, data=all_data[(1:6),]))
+landfilled_slope <- summary_4$coefficients[2,1]
+
+beta_mean = c(recycled_slope, combusted_slope, landfilled_slope)
+
+# Hierarchical model:
+hierarchical_intercept_mean <- mean(alpha_mean)
+hierarchical_slope_mean <- mean(beta_mean)
+hierarchical_sd_mean <- (sd(all_data[1:6,'Materials recycled']) + sd(all_data[1:6,'Material combusted']) + sd(all_data[1:6,'Materials landfilled']))/3
+
+```
+
+# Fit models
+
+```{r}
+# Prepare data
+data_hierarchical = list(
+  N = nrow(all_data[7:15,]),
+  J = ncol(all_data[,2:4]),
+  x = all_data[7:15,'year'],
+  y = all_data[7:15, 2:4],
+  xpred = 2019,
+  sd_mean = hierarchical_sd_mean,
+  slope_mean = hierarchical_slope_mean,
+  intercept_mean = hierarchical_intercept_mean
+)
+
+data_separate = list(
+  N = nrow(all_data[7:15,]),
+  J = ncol(all_data[,2:4]),
+  x = all_data[7:15,'year'],
+  y = all_data[7:15, 2:4],
+  xpred = 2019,
+  alpha_mean = alpha_mean,
+  beta_mean = beta_mean
+)
+
+
+fit_hierarchical <- stan(file = "Hierarchical_project.stan", data = data_hierarchical) #Had to remove the sigma prior and modify the sd priors bc it wasn't converging
+fit_separate <- stan(file = "Separate_project.stan", data = data_separate)
+monitor(fit_hierarchical)
+monitor(fit_separate)
+```
+
+# Convergence analysis
+
+## R-hat and ESS
+
+Hierarchical:
+
+```{r results='asis'}
+hier_matr = matrix(data=NA, nrow=6, ncol=3)
+colnames(hier_matr) = c('Rhat', 'bulk-ESS', 'tail-ESS')
+rownames(hier_matr) = c('alpha[1]', 'beta[1]', 'alpha[2]', 'beta[2]', 'alpha[3]', 'beta[3]')
+for (i in 1:3) {
+  alpha <- paste('alpha[', as.character(i), ']', sep="")
+  beta <- paste('beta[', as.character(i), ']', sep="")
+  alpha_mat <- extract_variable_matrix(fit_hierarchical, alpha)
+  beta_mat <- extract_variable_matrix(fit_hierarchical, beta)
+  rhat_alpha <- posterior::rhat(alpha_mat)
+  rhat_beta <- posterior::rhat(beta_mat)
+  b_ess_alpha <- posterior::ess_bulk(alpha_mat)
+  b_ess_beta <- posterior::ess_bulk(beta_mat)
+  t_ess_alpha <- posterior::ess_tail(alpha_mat)
+  t_ess_beta <- posterior::ess_tail(beta_mat)
+  hier_matr[i+(i-1), 1] <- rhat_alpha
+  hier_matr[i+(i-1)+1, 1] <- rhat_beta
+  hier_matr[i+(i-1), 2] <- b_ess_alpha
+  hier_matr[i+(i-1)+1, 2] <- b_ess_beta
+  hier_matr[i+(i-1), 3] <- t_ess_alpha
+  hier_matr[i+(i-1)+1, 3] <- t_ess_beta
+}
+kable(hier_matr, caption='Hierarchical model')
+```
+
+Separate:
+
+```{r results='asis'}
+sep_matr = matrix(data=NA, nrow=6, ncol=3)
+colnames(sep_matr) = c('Rhat', 'bulk-ESS', 'tail-ESS')
+rownames(sep_matr) = c('alpha[1]', 'beta[1]', 'alpha[2]', 'beta[2]', 'alpha[3]', 'beta[3]')
+for (i in 1:3) {
+  alpha <- paste('alpha[', as.character(i), ']', sep="")
+  beta <- paste('beta[', as.character(i), ']', sep="")
+  alpha_mat <- extract_variable_matrix(fit_separate, alpha)
+  beta_mat <- extract_variable_matrix(fit_separate, beta)
+  rhat_alpha <- posterior::rhat(alpha_mat)
+  rhat_beta <- posterior::rhat(beta_mat)
+  b_ess_alpha <- posterior::ess_bulk(alpha_mat)
+  b_ess_beta <- posterior::ess_bulk(beta_mat)
+  t_ess_alpha <- posterior::ess_tail(alpha_mat)
+  t_ess_beta <- posterior::ess_tail(beta_mat)
+  sep_matr[i+(i-1), 1] <- rhat_alpha
+  sep_matr[i+(i-1)+1, 1] <- rhat_beta
+  sep_matr[i+(i-1), 2] <- b_ess_alpha
+  sep_matr[i+(i-1)+1, 2] <- b_ess_beta
+  sep_matr[i+(i-1), 3] <- t_ess_alpha
+  sep_matr[i+(i-1)+1, 3] <- t_ess_beta
+}
+kable(sep_matr, caption='Separate model')
+```
+
+# Posterior predictive checks
+
+```{r}
+# Materials combusted 2019 prediction
+s_yrep_c <- as.matrix(fit_separate, pars = "yrep_c")
+s_yrep_r <- as.matrix(fit_separate, pars = "yrep_r")
+s_yrep_l <- as.matrix(fit_separate, pars = "yrep_l")
+h_yrep_c <- as.matrix(fit_hierarchical, pars = "yrep_c")
+h_yrep_r <- as.matrix(fit_hierarchical, pars = "yrep_r")
+h_yrep_l <- as.matrix(fit_hierarchical, pars = "yrep_l")
+y_c <- all_data[['Material combusted']]
+y_r <- all_data[['Materials recycled']]
+y_l <- all_data[['Materials landfilled']]
+ppc_hist(y_c[7:15], yrep = s_yrep_c[1:8,])
+```
+
+# Model comparison (LOO-CV)
+
+```{r separate_k_plot, fig.height=4, fig.width=5, fig.cap="k-hat values for the separate model."}
+#PSIS-LOO for separate model
+sep_loo <- rstan::loo(fit_separate)
+sep_elpd <- sep_loo$estimates[1,1]
+# Effective number of parameters:
+sep_p <- sep_loo$estimates[2,1]
+plot(sep_loo)
+```
+
+```{r hierarchical_k_plot, fig.height=4, fig.width=5, fig.cap="k-hat values for the hierarchical model."}
+#PSIS-LOO for hierarchical model
+hier_loo <- rstan::loo(fit_hierarchical)
+hier_elpd <- hier_loo$estimates[1,1]
+# Effective number of parameters:
+hier_p <- hier_loo$estimates[2,1]
+plot(hier_loo)
+
+```
+
+```{r results='asis'}
+loo_table <- rbind(c(hier_elpd, sep_elpd), c(hier_p, sep_p))
+colnames(loo_table) <- c('Hierarchical', 'Separate')
+rownames(loo_table) <- c('elpd', 'p_eff')
+kable(loo_table, caption='LOO-CV results')
+
+```
