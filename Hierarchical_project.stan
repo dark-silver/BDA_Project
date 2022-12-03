@@ -13,8 +13,8 @@ parameters {
   real mu_beta; // Beta prior mean
   real<lower=0> sigma_alpha; // Alpha prior std
   real<lower=0> sigma_beta; // Beta prior std
-  vector[J] alpha; // category intercepts
-  vector[J] beta; // category slopes
+  vector<lower=0>[J] alpha; // category intercepts
+  vector<lower=0>[J] beta; // category slopes
   real<lower=0> sigma; // Common positive std
 }
 model {
@@ -33,14 +33,14 @@ model {
 }
 generated quantities {
   // Prediction for combusted materials
-  real ypred_c = normal_rng(alpha[1] + beta[1]*xpred, sigma); 
+  real ypred_r = normal_rng(alpha[1] + beta[1]*xpred, sigma); 
   // Prediction for recycled materials
-  real ypred_r = normal_rng(alpha[2] + beta[2]*xpred, sigma); 
+  real ypred_c = normal_rng(alpha[2] + beta[2]*xpred, sigma); 
   // Prediction for landfilled materials
   real ypred_l = normal_rng(alpha[3] + beta[3]*xpred, sigma);
   // Replicated data sets
-  real yrep_c[N] = normal_rng(alpha[1] + beta[1]*x, sigma);
-  real yrep_r[N] = normal_rng(alpha[2] + beta[2]*x, sigma);
+  real yrep_r[N] = normal_rng(alpha[1] + beta[1]*x, sigma);
+  real yrep_c[N] = normal_rng(alpha[2] + beta[2]*x, sigma);
   real yrep_l[N] = normal_rng(alpha[3] + beta[3]*x, sigma);
   vector[J*N] log_lik;
   
