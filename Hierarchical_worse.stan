@@ -19,13 +19,13 @@ parameters {
 }
 model {
   // priors
-  mu_alpha ~ normal(intercept_mean,100);
-  mu_beta ~ normal(slope_mean,1000);
-  sigma_alpha ~ normal(1000,200);
-  sigma_beta ~ normal(10000,2000);
+  mu_alpha ~ normal(intercept_mean,10);
+  mu_beta ~ normal(slope_mean,100);
+  sigma_alpha ~ normal(300,100);
+  sigma_beta ~ normal(3000,1000);
   alpha ~ normal(mu_alpha, sigma_alpha);
   beta ~ normal(mu_beta, sigma_beta);
-  sigma ~ normal(400000, 1000);
+  sigma ~ normal(sd_mean, 1000);
   
   // likelihood
   for (j in 1:J)

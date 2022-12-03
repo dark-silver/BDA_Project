@@ -16,9 +16,9 @@ parameters {
 model {
   // priors
   for (j in 1:J){
-    alpha[j] ~ normal(alpha_mean[j], 1000);
-    beta[j] ~ normal(beta_mean[j], 10000);
-    sigma[j] ~ normal(400000, 1000);
+    alpha[j] ~ normal(alpha_mean[j], 100);
+    beta[j] ~ normal(beta_mean[j], 1000);
+    sigma[j] ~ normal(sds[j], 1000);
   }
   
   // likelihood
