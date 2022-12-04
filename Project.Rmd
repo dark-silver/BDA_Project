@@ -2,12 +2,10 @@
 title: "BDA Project"
 author: "Anonymous"
 output:
-  pdf_document: null
-  toc: yes
-  html_document:
-    df_print: paged
+  bookdown::pdf_document2
 toc_depth: 1
 urlcolor: blue
+bibliography: Bibliography.bib
 ---
 
 ```{r setup, include=FALSE}
@@ -17,9 +15,7 @@ urlcolor: blue
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Loaded packages
-
-```{r message=FALSE, warning=FALSE}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 #install.packages("readxl")
 #nstall.packages("DescTools")
 library(readxl)
@@ -36,11 +32,29 @@ options(mc.cores = 1)
 library(bayesplot)
 library(posterior)
 library(knitr)
+#install.packages('cowplot')
+library(cowplot)
 ```
 
-# Clean data
+# Introduction
 
-```{r, results='hide'}
+# Data
+
+The data used in this project comes from the "Advancing Sustainable Materials Management: Facts and Figures Report" of the United States Environmental Protection Agency (@epa_2022). The data is available for download through this link: <https://edg.epa.gov/data/PUBLIC/OLEM/Materials_Municipal_Waste_Stream_1960_2018.xlsx>.
+
+The data is in Excel format and contains waste management data from the US for the years 1960-2018. This document contains a large amount of sheets, but for this project, only the "Materials generated", "Materials recycled", "Material combusted", and "Materials landfilled" sheets were used, as they are the only ones with clear data for textiles.
+
+The data from 1960 to 2000 is given every ten years, then there is data for 2005, and the data from 2010-2018 is given yearly. Due to this inconsistency in time intervals of data, only part of the years are used to fit the model. The years 2010-2018 were chosen, as they have the most regular data and they are the most recent. The rest of the data is used to help in estimating prior parameters.
+
+Also, the sheet "Materials generated" is not used in the model as it isn't interesting to the goal of the project, but it is used to aid in prior parameter determination.
+
+## The final data
+
+As the data is scattered in multiple sheets of an Excel file, the specific textile-related data had to be extracted from each sheet, combined, and the row and column names cleaned up a bit in order to acquire a final dataset. This results in a dataframe with categories "Materials generated", "Materials recycled", "Material combusted", and "Materials landfilled".
+
+The year is also adjusted such that the year 1950 becomes the new year 0 (1950 is subtracted from each year). This is done so that the significantly long period of time before data collection where values for each category might have been 0 doesn't affect the intercept or the slope of the final models. For example, the first landfill in the US was established in 1937 (@zylberberg_2019), so there would have been 1937 years of 0 values in the "Materials landfilled" catefgory, which could have a significant impact on the linear model. Hence, a new year 0 was chosen in which all categories of waste management had already been implemented in some sense.
+
+```{r, results='hide', include=FALSE}
 setwd("/Users/vilmatiainen/Documents/Aalto bsc/Year 3/BDA/BDA_project")
 
 multiplesheets <- function(fname) {
@@ -80,24 +94,66 @@ for (name in names(init_df)) {
 rownames(all_data) <-gsub("X","",as.character(rownames(all_data)))
 
 all_data['year'] <- as.numeric(as.character(rownames(all_data)))
-all_data['Materials recycled-%'] <- (all_data['Materials recycled']/all_data['Materials generated'])*100
-all_data['Material combusted-%'] <- (all_data['Material combusted']/all_data['Materials generated'])*100
-all_data['Materials landfilled-%'] <- (all_data['Materials landfilled']/all_data['Materials generated'])*100
 
 rownames(all_data) <- NULL
 
+plot_his_frame <- all_data[1:6,]
+plot_frame <- all_data[7:15,]
+
 #Adjust 1950 to be year 0:
+all_data['original year'] <- all_data['year']
 all_data['year'] <- all_data['year']-1950
 ```
 
-# Plot data
+The final dataframe can be seen in Table \@ref(tab:final-df).
 
-```{r data_plot, fig.height=4, fig.width=5, fig.cap="Data."}
-plot(x=all_data[['year']], y=all_data[['Material combusted']], type='l')
+```{r final-df, echo=FALSE}
+kable(all_data, caption='Final dataframe')
+```
+
+The final data is visualised in Figure \@ref(fig:data-his-plot) for years 1960-2005, and in Figure \@ref(fig:data-plot) for years 2010-2018.
+
+```{r data-his-plot, echo=FALSE, fig.cap="Data for years 1960-2005.", fig.height=2, fig.width=6}
+par(mfrow=c(1,3))
+plot(x=plot_his_frame[['year']], y=plot_his_frame[['Materials recycled']], type='l', xlab='year', ylab='Materials recycled (tons)')
+plot(x=plot_his_frame[['year']], y=plot_his_frame[['Material combusted']], type='l', xlab='year', ylab='Materials combusted (tons)')
+plot(x=plot_his_frame[['year']], y=plot_his_frame[['Materials landfilled']], type='l', xlab='year', ylab='Materials landfilled (tons)')
 
 ```
 
-# Define prior parameters
+```{r data-plot, echo=FALSE, fig.cap="Data for years 2010-2018.", fig.height=2, fig.width=6}
+par(mfrow=c(1,3))
+plot(x=plot_frame[['year']], y=plot_frame[['Materials recycled']], type='l', xlab='year', ylab='Materials recycled (tons)')
+plot(x=plot_frame[['year']], y=plot_frame[['Material combusted']], type='l', xlab='year', ylab='Materials combusted (tons)')
+plot(x=plot_frame[['year']], y=plot_frame[['Materials landfilled']], type='l', xlab='year', ylab='Materials landfilled (tons)')
+
+```
+
+As can be seen from the figures, the data could likely be approximated decently well with a linear model.
+
+# The models
+
+Since the data used in this project is split into three categories (materials recycled, materials combusted, and materials landfilled), and their differences are an aspect of interest, a model was needed which differentiates between them. Two good options for this are the separate model and the hierarchical model. Hence, in this project both of these models are implemented and compared.
+
+## Separate model
+
+The separate model assumes that each category is independent from the other categories, and essentially gives each category its own Bayesian model. Hence, it considers the categories to have no relation between each other,
+
+## Hierarchical model
+
+The hierarchical model considers each category as being distinct from each other, but still similar enough that the measurements from one category can influence the predictions for another. To accommodate for this, the hierarchical model provides separate models for each category, however the models share the same variance and the means of the models share the same prior distribution constructed with hyperparameters. Hence, the hierarchical model considers the categories to be distinct, but still aknowledges some relation between them.
+
+## Linear Gaussian model
+
+As was shown in the "Data" section, the data used to fit the models is linear, with the explanatory variable being the year. Hence, both the separate and hierarchical models are implemented as linear gaussian models in this project. This means the parameters of interest are the intercepts ($\alpha$) and slopes ($\beta$) of the lines describing the data. The likelihood for this model is as follows:
+
+$$
+y \sim N(\alpha+\beta*x, \sigma)
+$$
+
+# Priors
+
+## Parameters
 
 ```{r}
 # Separate model:
@@ -119,6 +175,7 @@ landfilled_slope <- summary_4$coefficients[2,1]
 beta_mean = c(recycled_slope, combusted_slope, landfilled_slope)
 
 sd_mean = c(sd(all_data[1:6,'Materials recycled']), sd(all_data[1:6,'Material combusted']), sd(all_data[1:6,'Materials landfilled']))
+sd_mean_old <- sd_mean
 # Calculate the factor by how much the standard deviation of generated textiles has shrunk after between 1960-2005 and 2010-2018
 factor <- sd(all_data[1:6, 'Materials generated'])/sd(all_data[7:15, 'Materials generated'])
 # Divide sd's by the factor to make them more realistic
@@ -137,9 +194,147 @@ hierarchical_sd_mean <- mean(sd_mean)
 
 ```
 
-# Fit models
+## Initial priors
 
-```{r}
+Initial priors refer to the first priors which were tested (and later potentially changed).
+
+### Separate model
+
+The priors for $\alpha$, $\beta$, and $\sigma$ are normal distributions, because those are convenient considering the likelihood is also a normal distribution. Since the separate model is in question, separate priors are needed for each category ("Materials recycled", "Material combusted", and "Materials landfilled").
+
+To get the mean parameter of the $\alpha$ and $\beta$ priors ($\mu$ in $N(\mu,\sigma)$), a linear model was fit for the 1960-2005 data of each category. Then, the means ($\mu$) of the $\alpha$ parameters for each category were set to be the maximum of 0 and the intercept extracted from the corresponding linear model (the intercept shouldn't be negative as waste management can't take on a negative value). Then, the means ($\mu$) of the $\beta$ parameters for each category were set to be the slope extracted from the corresponding model.
+
+The standard deviation parameters of the $\alpha$ and $\beta$ priors ($\sigma$ in $N(\mu,\sigma)$), were set to be 100 and 1000, respectively, for each category. This was chosen quite arbitrarily to represent the prior being weakly informative (the sd for $\beta$ is bigger than that of $\alpha$ because the slopes had much larger values than intercepts).
+
+The means for the $\sigma$ priors were set to be the standard deviations of the data for the corresponding category from years 1960-2005. The standard deviations for the $\sigma$ priors were set to be 1000 to represent weak informativeness.
+
+This resulted in the priors shown in Table \@ref(tab:s-p-i-tab).
+
+```{r s-p-i-tab, echo=FALSE}
+alphas <- c()
+betas <- c()
+sigmas <- c()
+for (i in alpha_mean) {
+  alphas <- append(alphas, paste('N(', round(i, digits=0), ',', 100, ')', sep=""))
+}
+for (i in beta_mean) {
+  betas <- append(betas, paste('N(', round(i, digits=0), ',', 1000, ')', sep=""))
+}
+for (i in sd_mean_old) {
+  sigmas <- append(sigmas, paste('N(', round(i, digits=0), ',', 1000, ')', sep=""))
+}
+s_p_init_matr = cbind(alphas, betas, sigmas)
+colnames(s_p_init_matr) = c('Alpha', 'Beta', 'Sigma')
+rownames(s_p_init_matr) = c('Materials recycled', 'Materials combusted', 'Materials landfilled')
+kable(s_p_init_matr, caption="Separate model intial priors (values rounded to 0 digits).")
+```
+
+### Hierarchical model
+
+For the hierarchical model, priors were needed for the means ($\mu$ in $N(\mu,\sigma)$) and standard deviations ($\sigma$ in $N(\mu,\sigma)$) for both $\alpha$ and $\beta$, and then for the common standard deviation $\sigma$ (5 priors in total: $\alpha$-mean, $\alpha$-sd, $\beta$-mean, $\beta$-sd, $\sigma$).
+
+The prior for the $\alpha$-mean was set to have the average of the intercept estimates from the three categories as its mean, and 10 as it's standard deviation because we were quite confident in the mean value of the $\alpha$-mean (10 is a fairly small number so it made the prior informative).
+
+The prior for the $\alpha$-sd was set to have the sum of the standard deviations of the $\alpha$ priors from the separate model as its mean, and 100 as it's standard deviation to make the prior weakly informative.
+
+The prior for the $\beta$-mean was set to have the average of the slope estimates from the three categories as its mean, and 100 as it's standard deviation because we were again quite confident in the mean value of the $\beta$-mean (100 is quite a small value compared to the average of the slopes, so this made the prior informative).
+
+The prior for the $\beta$-sd was set to have the sum of the standard deviations of the $\beta$ priors from the separate model as its mean, and 1000 as it's standard deviation to make the prior weakly informative (again, the standard deviation for $\beta$-sd prior is larger than for $\alpha$-sd prior because the values for the slopes are much larger).
+
+The prior for $\sigma$ was set to have the mean of the standard deviations of the 1960-2005 data of each category as its mean, and 1000 as its standard deviation to make it weakly informative.
+
+The resulting hyperpriors (and sigma prior) can be seen in Table \@ref(tab:h-p-i-tab), and their usage can be seen in the following formula:
+
+$$
+\alpha_i \sim N(\alpha\text{-}mean, \alpha\text{-}sd)\\
+\beta_i \sim N(\beta\text{-}mean, \beta\text{-}sd)\\
+y_i \sim N(\alpha_i + \beta_i*x, \sigma)
+$$
+
+```{r h-p-i-tab, echo=FALSE}
+h_p_init_matr <- c(paste('N(', round(hierarchical_intercept_mean, digits=0), ',', 10, ')', sep=""),
+                   paste('N(', 300, ',', 100, ')', sep=""),
+                   paste('N(', round(hierarchical_slope_mean, digits=0), ',', 100, ')', sep=""),
+                   paste('N(', 3000, ',', 1000, ')', sep=""),
+                   paste('N(', round(hierarchical_sd_mean, digits=0), ',', 1000, ')', sep=""))
+h_p_init_matr <- rbind(h_p_init_matr)
+colnames(h_p_init_matr) = c('Alpha-mean', 'Alpha-sd', 'Beta-mean', 'Beta-sd', 'Sigma')
+rownames(h_p_init_matr) <- c('Prior')
+kable(h_p_init_matr, caption="Initial hyperpriors (and sigma prior) for the hierarchical model (values rounded to 0 digits).")
+```
+
+## Final priors
+
+Final priors refer to the priors obtained after all necessary modifications from analysis (the changes are also described throughout the analysis).
+
+### Separate model
+
+For the separate model, it was realised during analysis that the standard deviations of the $\alpha$ and $\beta$ priors were too small compared to the values in the data, and the priors weren't actually weakly informative. Hence, the standard deviation for the $\alpha$ prior was increased to 1000, and the standard deviation for the $\beta$ prior was increased to 10000.
+
+In addition, the mean of the $\sigma$ prior was modified. The standard deviations of years 1960-2005 and years 2010-2018 were compared for the "Materials generated" data (which wasn't included in the model). The standard deviation was almost three times larger for 1969-2005 than for 2010-2018. Hence, the standard deviations of the $\sigma$ prior were divided by this coefficient (sd-previous-years/sd-recent-years). As "Materials generated" is the sum of the other categories, it was sensible to assume that the trends in the former would be similar to those in the latter, so dividing by the coefficient was sensible as well.
+
+These changes resulted in the priors show in Table \@ref(tab:s-p-f-tab).
+
+```{r s-p-f-tab, echo=FALSE}
+alphas <- c()
+betas <- c()
+sigmas <- c()
+for (i in alpha_mean) {
+  alphas <- append(alphas, paste('N(', round(i, digits=0), ',', 1000, ')', sep=""))
+}
+for (i in beta_mean) {
+  betas <- append(betas, paste('N(', round(i, digits=0), ',', 10000, ')', sep=""))
+}
+for (i in sd_mean) {
+  sigmas <- append(sigmas, paste('N(', round(i, digits=0), ',', 1000, ')', sep=""))
+}
+s_p_final_matr = cbind(alphas, betas, sigmas)
+colnames(s_p_final_matr) = c('Alpha', 'Beta', 'Sigma')
+rownames(s_p_final_matr) = c('Materials recycled', 'Materials combusted', 'Materials landfilled')
+kable(s_p_final_matr, caption="Separate model final priors (values rounded to 0 digits).")
+```
+
+### Hierarchical model
+
+For the hierarchical model, the standard deviations of the $\alpha$-mean and $\beta$-mean priors were increased, because after some thought it was concluded that the standard deviations were too small compared to the scale of the data. The standard deviations were increased to 100 and 1000, respectively.
+
+The parameters for the $\alpha$-sd and $\beta$-sd priors were also recalculated according to the new separate model priors. Also, instead of summing the standard deviations of the separate model $\alpha$ and $\beta$ priors, the average was taken to acquire the prior mean. This made more sense as the $\alpha$-mean and $\beta$-mean prior means are also calculated as an average. The standard deviations of the $\alpha$-sd and $\beta$-sd priors were changed accordingly to 200 and 2000, respectively, to represent weak informativity.
+
+The resulting hyperpriors (and sigma prior) can be seen in Table \@ref(tab:h-p-f-tab).
+
+```{r h-p-f-tab, echo=FALSE}
+h_p_init_matr <- c(paste('N(', round(hierarchical_intercept_mean, digits=0), ',', 100, ')', sep=""),
+                   paste('N(', 1000, ',', 200, ')', sep=""),
+                   paste('N(', round(hierarchical_slope_mean, digits=0), ',', 1000, ')', sep=""),
+                   paste('N(', 10000, ',', 2000, ')', sep=""),
+                   paste('N(', round(hierarchical_sd_mean, digits=0), ',', 1000, ')', sep=""))
+h_p_final_matr <- rbind(h_p_init_matr)
+colnames(h_p_final_matr) = c('Alpha-mean', 'Alpha-sd', 'Beta-mean', 'Beta-sd', 'Sigma')
+rownames(h_p_final_matr) <- c('Prior')
+kable(h_p_final_matr, caption="Final hyperpriors (and sigma prior) for the hierarchical model (values rounded to 0 digits).")
+```
+
+# Stan code
+
+## Separate
+
+Stan code with final priors:
+
+```{r echo=FALSE}
+writeLines(readLines("Separate_project.stan"))
+```
+
+## Hierarchical
+
+Stan code with final priors:
+
+```{r echo=FALSE}
+writeLines(readLines("Hierarchical_project.stan"))
+```
+
+# Fitting the models
+
+```{r results='hide'}
 # Prepare data
 data_hierarchical = list(
   N = nrow(all_data[7:15,]),
@@ -170,7 +365,7 @@ monitor(fit_hierarchical)
 monitor(fit_separate)
 ```
 
-# Convergence analysis
+# Convergence diagnostics
 
 ## R-hat and ESS
 
@@ -238,7 +433,7 @@ For first separate model all Rhat values were \>1.05 and most ESS values were \<
 check_hmc_diagnostics(fit_hierarchical)
 ```
 
-Hierarchical had divergences. Changing adapt_delta didn't seem to do much, so instead priors were modified. At this point, a mistake in the alpha_sigma and beta_sigma priors was noticed (too high means and std), so that was fixed. Afterwards, no more divergences.
+The hierarchical model had a few divergences in the initial model. Changing adapt_delta didn't seem to do much, so instead priors were modified. At this point, a mistake in the alpha_sigma and beta_sigma priors was noticed. In the separate model, the standard deviation parameters for alpha and beta were too small compared to the values in the data, meaning the priors weren't really weakly informative. The parameters of the alpha_sigma and beta_sigma priors in the hierarchical model are calculated based on these standard deviations in the separate model. This calculation was also nonsensical, additioning all the standard deviations instead of averaging them. Both of these issues were addressed, after which there were no more divergences in the hierarchical model, as can be seen above.
 
 ```{r}
 check_hmc_diagnostics(fit_separate)
@@ -257,7 +452,10 @@ h_yrep_l <- as.matrix(fit_hierarchical, pars = "yrep_l")
 y_c <- all_data[['Material combusted']]
 y_r <- all_data[['Materials recycled']]
 y_l <- all_data[['Materials landfilled']]
-ppc_dens_overlay(y_c[7:15], yrep = s_yrep_c[1:50,])
+par(mfrow=c(1,2))
+p_dens <- ppc_dens_overlay(y_c[7:15], yrep = s_yrep_c[1:50,])
+p_hist <- ppc_hist(y_c[7:15], yrep = s_yrep_c[1:8,])
+plot_grid(p_dens, p_hist)
 ```
 
 ```{r}
@@ -355,7 +553,7 @@ kable(sep_pred, caption='Separate model')
 
 # Sensitivity analysis
 
-```{r}
+```{r, include=FALSE}
 # Fit models with uniform prior
 uniform_hierarchical <- stan(file = "Uniform_hierarchical.stan", data = data_hierarchical)
 uniform_separate <- stan(file = "Uniform_separate.stan", data = data_separate)
@@ -487,7 +685,7 @@ temp_3['col_val'] <- 'Landfilled'
 hier_sens_df <- rbind(hier_sens_df, temp_3)
 ```
 
-```{r}
+```{r include=FALSE}
 sep_sens_df <- as.data.frame(colMeans(as.data.frame(extract(uniform_separate, 'yrep_r'))))
 rownames(sep_sens_df) <- NULL
 colnames(sep_sens_df) <- c('value')
@@ -611,13 +809,15 @@ temp_3['col_val'] <- 'Landfilled'
 sep_sens_df <- rbind(sep_sens_df, temp_3)
 ```
 
-Plot results
+## Hierarchical
 
 ```{r hier_sens_plot, fig.height=4, fig.width=5, fig.cap="Sensitivity analysis for hierarchical model."}
 ggplot(data=hier_sens_df, aes(x=value, color = Prior)) +
   geom_density() +
   facet_wrap(y_type ~ col_val, scales='free')
 ```
+
+## Separate
 
 ```{r sep_sens_plot, fig.height=4, fig.width=5, fig.cap="Sensitivity analysis for separate model."}
 ggplot(data=sep_sens_df, aes(x=value, color = Prior)) +
@@ -653,3 +853,11 @@ rownames(loo_table) <- c('elpd', 'p_eff')
 kable(loo_table, caption='LOO-CV results')
 
 ```
+
+# Discussion
+
+# Conclusion
+
+# Self reflection
+
+# References
