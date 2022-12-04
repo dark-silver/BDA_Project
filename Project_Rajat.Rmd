@@ -441,9 +441,7 @@ kable(sep_matr, caption='Separate model Rhat and ESS.')
 For the initial priors, all the separate model's Rhat values were greater than 1.05 and most ESS values were smaller than 100, meaning the chains did not converge. Initially this was fixed through simplifying the model by removing the sigma prior entirely. The sigma prior was later added back with different parameters (final sigma prior in the section on priors), and the Rhat and ESS values for the final model can be seen in Table \@ref(tab:sep-rhat). As can be seen from the table, all Rhat values are smaller than 1.05, and all ESS values are larger than 100, meaning the final separate model has converged.
 
 ## Hamiltonian Monte Carlo (HMC) diagnostics
-
 ### Hierarchical
-
 HMC diagnostics for the final hierarchical model:
 
 ```{r}
@@ -463,15 +461,11 @@ check_hmc_diagnostics(fit_separate)
 ```
 
 The separate model had no divergences or other issues with HMC for either the initial priors or the final priors.
-
 # Posterior predictive checks
 
 ## Separate
-
 Figures \@ref(fig:cs-plot), \@ref(fig:rs-plot), and \@ref(fig:ls-plot) show posterior predictive checks for the final separate model. The density plots suggest that the model is an okay fit as the replicate draws seem somewhat similar to the true data, but the histograms don't look quite as good. However, considering the dataset is very small, this extent of fit is satisfactory for this project.
-
 For the initial model without a sigma prior, the fit was worse. The distributions were clearly too wide, so a sigma prior was added (the final sigma prior is discussed in the Priors section). This made the fit much better.
-
 ```{r cs-plot, fig.height=2, fig.width=7, fig.cap="Posterior predictive check for materials combusted with the separate model.", echo=FALSE, warning=FALSE}
 # Materials combusted 2019 prediction
 s_yrep_c <- as.matrix(fit_separate, pars = "yrep_c")
@@ -483,8 +477,10 @@ h_yrep_l <- as.matrix(fit_hierarchical, pars = "yrep_l")
 y_c <- all_data[['Material combusted']]
 y_r <- all_data[['Materials recycled']]
 y_l <- all_data[['Materials landfilled']]
+par(mfrow=c(1,2))
 p_dens <- ppc_dens_overlay(y_c[7:15], yrep = s_yrep_c[1:50,])
 p_hist <- ppc_hist(y_c[7:15], yrep = s_yrep_c[1:8,])
+
 plot_grid(p_dens, p_hist)
 ```
 
@@ -494,41 +490,29 @@ p_hist <- ppc_hist(y_r[7:15], yrep = s_yrep_r[1:8,])
 plot_grid(p_dens, p_hist)
 ```
 
-```{r ls-plot, fig.height=2, fig.width=7, fig.cap="Posterior predictive check for materials landfilled with the separate model.", echo=FALSE, warning=FALSE}
-p_dens <- ppc_dens_overlay(y_l[7:15], yrep = s_yrep_l[1:50,])
-p_hist <- ppc_hist(y_l[7:15], yrep = s_yrep_l[1:8,])
-plot_grid(p_dens, p_hist)
+```{r, out.width="75%", out.height="75%"}
+ppc_dens_overlay(y_l[7:15], yrep = s_yrep_l[1:50,])
 ```
 
-## Hierarchical
-
-Figures \@ref(fig:ch-plot), \@ref(fig:rh-plot), and \@ref(fig:lh-plot) show posterior predictive checks for the final hierarchical model. The density plots suggest that the model is a somewhat decent (but worse than the separate model) fit as the replicate draws seem somewhat similar to the true data, but the histograms don't look quite as good. However, considering the dataset is very small again, this extent of fit is satisfactory for this project.
-
-For the initial model without a sigma prior, the fit was much worse. The distributions were clearly too wide, so a sigma prior was added (the final sigma prior is discussed in the Priors section). This made the fit much better.
-
-```{r ch-plot, fig.height=2, fig.width=7, fig.cap="Posterior predictive check for materials combusted with the hierarchical model.", echo=FALSE, warning=FALSE}
-p_dens <- ppc_dens_overlay(y_c[7:15], yrep = h_yrep_c[1:50,])
-p_hist <- ppc_hist(y_c[7:15], yrep = h_yrep_c[1:8,])
-plot_grid(p_dens, p_hist)
+```{r, out.width="75%", out.height="75%"}
+ppc_dens_overlay(y_c[7:15], yrep = h_yrep_c[1:50,])
 ```
 
-```{r rh-plot, fig.height=2, fig.width=7, fig.cap="Posterior predictive check for materials recycled with the hierarchical model.", echo=FALSE, warning=FALSE}
-p_dens <- ppc_dens_overlay(y_r[7:15], yrep = h_yrep_r[1:50,])
-p_hist <- ppc_hist(y_r[7:15], yrep = h_yrep_r[1:8,])
-plot_grid(p_dens, p_hist)
+```{r, out.width="75%", out.height="75%"}
+ppc_dens_overlay(y_r[7:15], yrep = h_yrep_r[1:50,])
 ```
 
-```{r lh-plot, fig.height=2, fig.width=7, fig.cap="Posterior predictive check for materials landfilled with the hierarchical model.", echo=FALSE, warning=FALSE}
-p_dens <- ppc_dens_overlay(y_l[7:15], yrep = h_yrep_l[1:50,])
-p_hist <- ppc_hist(y_l[7:15], yrep = h_yrep_l[1:8,])
-plot_grid(p_dens, p_hist)
+```{r, out.width="75%", out.height="75%"}
+ppc_dens_overlay(y_l[7:15], yrep = h_yrep_l[1:50,])
 ```
 
 # Predictive performance assessment
 
 To assess performance, we can fit the models excluding the year 2018, instead adding that year as the predicted year. We can then compare the true values for 2018 to the predicted values.
 
-```{r include=FALSE}
+Fitting the models:
+
+```{r, results='hide'}
 # Prepare data
 performance_data_hierarchical = list(
   N = nrow(all_data[7:14,]),
@@ -882,11 +866,9 @@ ggplot(data=sep_sens_df, aes(x=value, color = Prior)) +
 ```
 
 From the figure, we can see that the separate model is quite sensitive to prior choice. Although there isn't much difference between the effect of the final priors and the uniform prior, the "Second" prior makes quite a large difference.
-
 ## Hierarchical
 
 Sensitivity analysis for the hierarchical model can be seen in Figure \@ref(fig:hier-sens-plot).
-
 ```{r hier-sens-plot, fig.height=4, fig.width=7, fig.cap="Sensitivity analysis for hierarchical model. Prediction refers to 2019 prediction, and Replicate refers to the original dataset replicated with the model."}
 ggplot(data=hier_sens_df, aes(x=value, color = Prior)) +
   geom_density() +
@@ -929,12 +911,12 @@ kable(loo_table, caption='LOO-CV results')
 ```
 
 We can see that the separate model has a slightly larger elpd-value, hence the separate model would be selected according to PSIS-LOO.
-
 # Discussion
 
 One area where this project could be improved is plotting. There were some issues with the formatting of the report and the scaling of the plots that could not be remedied in time. 
 
 Another aspect to be improved on would be the selection and cleaning of the dataset. Our chosen dataset has irregular time periods of data collection, and we had to account for this when designing our models. It would be preferable to have more data, that is grouped annually. 
+
 # Conclusion
 
 Through the course of this project, we have gone through the process of fitting our [dataset](#the-final-data) to two Stan models, a hierarchical model and a separate model, both of which fit linear Gaussian models to the features. We compare the R-hat and ESS diagnostics of both models to see if they converge or not (they do.) We then use the HMC diagnostics to verify if random samples drawn from the posterior distribution converge. 
@@ -944,6 +926,7 @@ We used these metrics in the early stages of the project to troubleshoot model d
 We gained some insights in working with smaller datasets, and have observed that the smaller the dataset, the more important the priors are in building a good model. This highlights the importance of domain expertise, and has applications in fields with small datasets like the measurements of particle accelerators or the treatment outcomes of patients wth rare cancers.
 
 In a future project, we could spend more time researching the topic and building up domain expertise to generate more informative priors, which have a very large impact on the performances of our models. We could also fit more models to our data and perform more in-depth cross validation of the models.
+
 # Self reflection
 
 # References
