@@ -119,6 +119,10 @@ landfilled_slope <- summary_4$coefficients[2,1]
 beta_mean = c(recycled_slope, combusted_slope, landfilled_slope)
 
 sd_mean = c(sd(all_data[1:6,'Materials recycled']), sd(all_data[1:6,'Material combusted']), sd(all_data[1:6,'Materials landfilled']))
+# Calculate the factor by how much the standard deviation of generated textiles has shrunk after between 1960-2005 and 2010-2018
+factor <- sd(all_data[1:6, 'Materials generated'])/sd(all_data[7:15, 'Materials generated'])
+# Divide sd's by the factor to make them more realistic
+sd_mean <- sd_mean/factor
 
 # Intercept means for 1950 0:
 recycled_intercept <- max(summary_2$coefficients[1,1], 0)
@@ -142,7 +146,7 @@ data_hierarchical = list(
   J = ncol(all_data[,2:4]),
   x = all_data[7:15,'year'],
   y = all_data[7:15, 2:4],
-  xpred = 2019,
+  xpred = (2019-1950),
   sd_mean = hierarchical_sd_mean,
   slope_mean = hierarchical_slope_mean,
   intercept_mean = hierarchical_intercept_mean
@@ -153,7 +157,7 @@ data_separate = list(
   J = ncol(all_data[,2:4]),
   x = all_data[7:15,'year'],
   y = all_data[7:15, 2:4],
-  xpred = 2019,
+  xpred = (2019-1950),
   alpha_mean = alpha_mean,
   beta_mean = beta_mean,
   sds = sd_mean
@@ -274,6 +278,351 @@ ppc_dens_overlay(y_r[7:15], yrep = h_yrep_r[1:50,])
 
 ```{r}
 ppc_dens_overlay(y_l[7:15], yrep = h_yrep_l[1:50,])
+```
+
+# Predictive performance assessment
+
+To assess performance, we can fit the model excluding the year 2018, instead adding that year as the predicted year. We can then compare the true values for 2018 to the predicted values.
+
+Fitting the models:
+
+```{r}
+# Prepare data
+performance_data_hierarchical = list(
+  N = nrow(all_data[7:14,]),
+  J = ncol(all_data[,2:4]),
+  x = all_data[7:14,'year'],
+  y = all_data[7:14, 2:4],
+  xpred = (2018-1950),
+  sd_mean = hierarchical_sd_mean,
+  slope_mean = hierarchical_slope_mean,
+  intercept_mean = hierarchical_intercept_mean
+)
+
+performance_data_separate = list(
+  N = nrow(all_data[7:14,]),
+  J = ncol(all_data[,2:4]),
+  x = all_data[7:14,'year'],
+  y = all_data[7:14, 2:4],
+  xpred = (2018-1950),
+  alpha_mean = alpha_mean,
+  beta_mean = beta_mean,
+  sds = sd_mean
+)
+
+
+fit_hierarchical_perf <- stan(file = "Hierarchical_project.stan", data = performance_data_hierarchical) #Had to remove the sigma prior and modify the sd priors bc it wasn't converging
+fit_separate_perf <- stan(file = "Separate_project.stan", data = performance_data_separate)
+```
+
+Results:
+
+```{r}
+ypred_r_h <- extract(fit_hierarchical_perf, 'ypred_r')
+ypred_c_h <- extract(fit_hierarchical_perf, 'ypred_c')
+ypred_l_h <- extract(fit_hierarchical_perf, 'ypred_l')
+pred_h <- c(ypred_r_h, ypred_c_h, ypred_l_h)
+ypred_r_s <- extract(fit_separate_perf, 'ypred_r')
+ypred_c_s <- extract(fit_separate_perf, 'ypred_c')
+ypred_l_s <- extract(fit_separate_perf, 'ypred_l')
+pred_s <- c(ypred_r_s, ypred_c_s, ypred_l_s)
+
+real_vals <- all_data[all_data$year==(2018 - 1950),]
+reals <- c(real_vals[['Materials recycled']], real_vals[['Material combusted']], real_vals[['Materials landfilled']])
+
+hier_pred = matrix(data=NA, nrow=3, ncol=3)
+colnames(hier_pred) = c('Materials recycled', 'Materials combusted', 'Materials landfilled')
+rownames(hier_pred) = c('Real', 'Predicted mean', 'Predicted sd')
+for (i in 1:3) {
+  hier_pred[1,i] <- reals[[i]]
+  hier_pred[2,i] <- mean(pred_h[[i]])
+  hier_pred[3,i] <- sd(pred_h[[i]])
+}
+kable(hier_pred, caption='Hierarchical model')
+```
+
+```{r}
+sep_pred = matrix(data=NA, nrow=3, ncol=3)
+colnames(sep_pred) = c('Materials recycled', 'Materials combusted', 'Materials landfilled')
+rownames(sep_pred) = c('Real', 'Predicted mean', 'Predicted sd')
+for (i in 1:3) {
+  sep_pred[1,i] <- reals[[i]]
+  sep_pred[2,i] <- mean(pred_s[[i]])
+  sep_pred[3,i] <- sd(pred_s[[i]])
+}
+kable(sep_pred, caption='Separate model')
+```
+
+# Sensitivity analysis
+
+```{r}
+# Fit models with uniform prior
+uniform_hierarchical <- stan(file = "Uniform_hierarchical.stan", data = data_hierarchical)
+uniform_separate <- stan(file = "Uniform_separate.stan", data = data_separate)
+
+# Fit models with other prior combo
+second_hierarchical <- stan(file = "2ndprior_hierarchical.stan", data = data_hierarchical)
+second_separate <- stan(file = "2ndprior_separate.stan", data = data_separate)
+
+hier_sens_df <- as.data.frame(colMeans(as.data.frame(extract(uniform_hierarchical, 'yrep_r'))))
+rownames(hier_sens_df) <- NULL
+colnames(hier_sens_df) <- c('value')
+hier_sens_df['Prior'] <- 'Uniform'
+hier_sens_df['x'] <- as.numeric(rownames(hier_sens_df))
+temp_df <- as.data.frame(colMeans(as.data.frame(extract(second_hierarchical, 'yrep_r'))))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Second'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+hier_sens_df <- rbind(hier_sens_df, temp_df)
+temp_df <- as.data.frame(colMeans(as.data.frame(extract(fit_hierarchical, 'yrep_r'))))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Original'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+hier_sens_df <- rbind(hier_sens_df, temp_df)
+hier_sens_df['y_type'] <- 'Replicate'
+
+temp_2 <- as.data.frame(extract(uniform_hierarchical, 'ypred_r'))
+rownames(temp_2) <- NULL
+colnames(temp_2) <- c('value')
+temp_2['Prior'] <- 'Uniform'
+temp_2['x'] <- as.numeric(rownames(temp_2))
+temp_df <- as.data.frame(extract(second_hierarchical, 'ypred_r'))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Second'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_2 <- rbind(temp_2, temp_df)
+temp_df <- as.data.frame(extract(fit_hierarchical, 'ypred_r'))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Original'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_2 <- rbind(temp_2, temp_df)
+temp_2['y_type'] <- 'Prediction'
+hier_sens_df <- rbind(hier_sens_df, temp_2)
+hier_sens_df['col_val'] <- 'Recycled'
+
+temp_3 <- as.data.frame(colMeans(as.data.frame(extract(uniform_hierarchical, 'yrep_c'))))
+rownames(temp_3) <- NULL
+colnames(temp_3) <- c('value')
+temp_3['Prior'] <- 'Uniform'
+temp_3['x'] <- as.numeric(rownames(temp_3))
+temp_df <- as.data.frame(colMeans(as.data.frame(extract(second_hierarchical, 'yrep_c'))))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Second'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_3 <- rbind(temp_3, temp_df)
+temp_df <- as.data.frame(colMeans(as.data.frame(extract(fit_hierarchical, 'yrep_c'))))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Original'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_3 <- rbind(temp_3, temp_df)
+temp_3['y_type'] <- 'Replicate'
+
+temp_2 <- as.data.frame(extract(uniform_hierarchical, 'ypred_c'))
+rownames(temp_2) <- NULL
+colnames(temp_2) <- c('value')
+temp_2['Prior'] <- 'Uniform'
+temp_2['x'] <- as.numeric(rownames(temp_2))
+temp_df <- as.data.frame(extract(second_hierarchical, 'ypred_c'))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Second'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_2 <- rbind(temp_2, temp_df)
+temp_df <- as.data.frame(extract(fit_hierarchical, 'ypred_c'))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Original'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_2 <- rbind(temp_2, temp_df)
+temp_2['y_type'] <- 'Prediction'
+temp_3 <- rbind(temp_3, temp_2)
+temp_3['col_val'] <- 'Combusted'
+hier_sens_df <- rbind(hier_sens_df, temp_3)
+
+temp_3 <- as.data.frame(colMeans(as.data.frame(extract(uniform_hierarchical, 'yrep_l'))))
+rownames(temp_3) <- NULL
+colnames(temp_3) <- c('value')
+temp_3['Prior'] <- 'Uniform'
+temp_3['x'] <- as.numeric(rownames(temp_3))
+temp_df <- as.data.frame(colMeans(as.data.frame(extract(second_hierarchical, 'yrep_l'))))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Second'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_3 <- rbind(temp_3, temp_df)
+temp_df <- as.data.frame(colMeans(as.data.frame(extract(fit_hierarchical, 'yrep_l'))))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Original'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_3 <- rbind(temp_3, temp_df)
+temp_3['y_type'] <- 'Replicate'
+
+temp_2 <- as.data.frame(extract(uniform_hierarchical, 'ypred_l'))
+rownames(temp_2) <- NULL
+colnames(temp_2) <- c('value')
+temp_2['Prior'] <- 'Uniform'
+temp_2['x'] <- as.numeric(rownames(temp_2))
+temp_df <- as.data.frame(extract(second_hierarchical, 'ypred_l'))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Second'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_2 <- rbind(temp_2, temp_df)
+temp_df <- as.data.frame(extract(fit_hierarchical, 'ypred_l'))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Original'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_2 <- rbind(temp_2, temp_df)
+temp_2['y_type'] <- 'Prediction'
+temp_3 <- rbind(temp_3, temp_2)
+temp_3['col_val'] <- 'Landfilled'
+hier_sens_df <- rbind(hier_sens_df, temp_3)
+```
+
+```{r}
+sep_sens_df <- as.data.frame(colMeans(as.data.frame(extract(uniform_separate, 'yrep_r'))))
+rownames(sep_sens_df) <- NULL
+colnames(sep_sens_df) <- c('value')
+sep_sens_df['Prior'] <- 'Uniform'
+sep_sens_df['x'] <- as.numeric(rownames(sep_sens_df))
+temp_df <- as.data.frame(colMeans(as.data.frame(extract(second_separate, 'yrep_r'))))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Second'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+sep_sens_df <- rbind(sep_sens_df, temp_df)
+temp_df <- as.data.frame(colMeans(as.data.frame(extract(fit_separate, 'yrep_r'))))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Original'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+sep_sens_df <- rbind(sep_sens_df, temp_df)
+sep_sens_df['y_type'] <- 'Replicate'
+
+temp_2 <- as.data.frame(extract(uniform_separate, 'ypred_r'))
+rownames(temp_2) <- NULL
+colnames(temp_2) <- c('value')
+temp_2['Prior'] <- 'Uniform'
+temp_2['x'] <- as.numeric(rownames(temp_2))
+temp_df <- as.data.frame(extract(second_separate, 'ypred_r'))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Second'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_2 <- rbind(temp_2, temp_df)
+temp_df <- as.data.frame(extract(fit_separate, 'ypred_r'))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Original'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_2 <- rbind(temp_2, temp_df)
+temp_2['y_type'] <- 'Prediction'
+sep_sens_df <- rbind(sep_sens_df, temp_2)
+sep_sens_df['col_val'] <- 'Recycled'
+
+temp_3 <- as.data.frame(colMeans(as.data.frame(extract(uniform_separate, 'yrep_c'))))
+rownames(temp_3) <- NULL
+colnames(temp_3) <- c('value')
+temp_3['Prior'] <- 'Uniform'
+temp_3['x'] <- as.numeric(rownames(temp_3))
+temp_df <- as.data.frame(colMeans(as.data.frame(extract(second_separate, 'yrep_c'))))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Second'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_3 <- rbind(temp_3, temp_df)
+temp_df <- as.data.frame(colMeans(as.data.frame(extract(fit_separate, 'yrep_c'))))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Original'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_3 <- rbind(temp_3, temp_df)
+temp_3['y_type'] <- 'Replicate'
+
+temp_2 <- as.data.frame(extract(uniform_separate, 'ypred_c'))
+rownames(temp_2) <- NULL
+colnames(temp_2) <- c('value')
+temp_2['Prior'] <- 'Uniform'
+temp_2['x'] <- as.numeric(rownames(temp_2))
+temp_df <- as.data.frame(extract(second_separate, 'ypred_c'))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Second'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_2 <- rbind(temp_2, temp_df)
+temp_df <- as.data.frame(extract(fit_separate, 'ypred_c'))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Original'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_2 <- rbind(temp_2, temp_df)
+temp_2['y_type'] <- 'Prediction'
+temp_3 <- rbind(temp_3, temp_2)
+temp_3['col_val'] <- 'Combusted'
+sep_sens_df <- rbind(sep_sens_df, temp_3)
+
+temp_3 <- as.data.frame(colMeans(as.data.frame(extract(uniform_separate, 'yrep_l'))))
+rownames(temp_3) <- NULL
+colnames(temp_3) <- c('value')
+temp_3['Prior'] <- 'Uniform'
+temp_3['x'] <- as.numeric(rownames(temp_3))
+temp_df <- as.data.frame(colMeans(as.data.frame(extract(second_separate, 'yrep_l'))))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Second'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_3 <- rbind(temp_3, temp_df)
+temp_df <- as.data.frame(colMeans(as.data.frame(extract(fit_separate, 'yrep_l'))))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Original'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_3 <- rbind(temp_3, temp_df)
+temp_3['y_type'] <- 'Replicate'
+
+temp_2 <- as.data.frame(extract(uniform_separate, 'ypred_l'))
+rownames(temp_2) <- NULL
+colnames(temp_2) <- c('value')
+temp_2['Prior'] <- 'Uniform'
+temp_2['x'] <- as.numeric(rownames(temp_2))
+temp_df <- as.data.frame(extract(second_separate, 'ypred_l'))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Second'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_2 <- rbind(temp_2, temp_df)
+temp_df <- as.data.frame(extract(fit_separate, 'ypred_l'))
+rownames(temp_df) <- NULL
+colnames(temp_df) <- c('value')
+temp_df['Prior'] <- 'Original'
+temp_df['x'] <- as.numeric(rownames(temp_df))
+temp_2 <- rbind(temp_2, temp_df)
+temp_2['y_type'] <- 'Prediction'
+temp_3 <- rbind(temp_3, temp_2)
+temp_3['col_val'] <- 'Landfilled'
+sep_sens_df <- rbind(sep_sens_df, temp_3)
+```
+
+Plot results
+
+```{r hier_sens_plot, fig.height=4, fig.width=5, fig.cap="Sensitivity analysis for hierarchical model."}
+ggplot(data=hier_sens_df, aes(x=value, color = Prior)) +
+  geom_density() +
+  facet_wrap(y_type ~ col_val, scales='free')
+```
+
+```{r sep_sens_plot, fig.height=4, fig.width=5, fig.cap="Sensitivity analysis for separate model."}
+ggplot(data=sep_sens_df, aes(x=value, color = Prior)) +
+  geom_density() +
+  facet_wrap(y_type ~ col_val, scales='free')
 ```
 
 # Model comparison (LOO-CV)

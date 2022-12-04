@@ -14,13 +14,6 @@ parameters {
   vector<lower=0>[J] sigma; // category stds
 }
 model {
-  // priors
-  for (j in 1:J){
-    alpha[j] ~ normal(alpha_mean[j], 1000);
-    beta[j] ~ normal(beta_mean[j], 10000);
-    sigma[j] ~ normal(sds[j], 1000);
-  }
-  
   // likelihood
   for (j in 1:J)
     y[,j] ~ normal(alpha[j]+beta[j]*x, sigma[j]);
