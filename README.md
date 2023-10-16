@@ -12,7 +12,7 @@ This repository contains the code and report for our final project in the Bayesi
 
 ## Motivation
 
-In light of the current global concerns about sustainability and environmental impact, we aimed to contribute to building a better future for everyone. Our project's primary goal is to predict the amount of textile waste in landfills, focusing on the United States.
+In light of the current global concerns about sustainability and environmental impact, we aimed to contribute to research on textile waste management. Our project's primary goal is to predict the amount of textile waste in landfills, focusing on the United States.
 
 ## Methodology
 
