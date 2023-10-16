@@ -8,7 +8,7 @@ This repository contains the code and report for our final project in the Bayesi
 
 - [Final_project.pdf](Final_project.pdf): This is the final project report, which provides a detailed overview of our project, including our motivation, methodology, results, and conclusions.
 
-- [Project.rmd](Project.rmd): This file is the R Markdown version of the final project report. It contains all the code used in the project, presented as separate code chunks, making it easy for readers to review and run the code independently.
+- [Project.rmd](Project.rmd): This file is the R Markdown version of the final project report. It contains all the code used in the project, presented as separate code chunks, making it easy for readers to review and run the code independently. Note: the Stan files in this repository are necessary for this file to run properly.
 
 ## Motivation
 
