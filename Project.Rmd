@@ -51,14 +51,14 @@ The data from 1960 to 2000 is given every ten years, then there is data for 2005
 
 Also, the sheet "Materials generated" is not used in the models as it isn't interesting to the goal of the project, but it is used as an aid in prior parameter determination.
 
-## The final data
+## The final data {#the-final-data}
 
 As the data is scattered in multiple sheets of an Excel file, the specific textile-related data had to be extracted from each sheet, combined, and the row and column names cleaned up a bit in order to acquire a final dataset. This results in a dataframe with categories "Materials generated", "Materials recycled", "Material combusted", and "Materials landfilled".
 
 The year is also adjusted such that the year 1950 becomes the new year 0 (1950 is subtracted from each year). This is done so that the significantly long period of time before data collection where values for each category might have been 0 doesn't affect the final models. For example, the first landfill in the US was established in 1937 (@zylberberg_2019), so there would have been 1937 years of 0 values in the "Materials landfilled" category, which would have a significant impact on the (slope of the linear) models. Hence, a new year 0 was chosen in which all categories of waste management had already been implemented/invented.
 
 ```{r, results='hide', include=FALSE}
-setwd("/Users/vilmatiainen/Documents/Aalto bsc/Year 3/BDA/BDA_project")
+setwd(getwd())
 
 multiplesheets <- function(fname) {
   
@@ -74,7 +74,7 @@ multiplesheets <- function(fname) {
 }
 
 # specifying the path name
-path <- "/notebooks/BDA_Project/Materials_Municipal_Waste_Stream_1960_2018.xlsx"
+path <- paste(getwd(), "/Materials_Municipal_Waste_Stream_1960_2018.xlsx", sep="")
 multiplesheets(path)
 
 # Dataframe for storing the textile data
@@ -159,7 +159,7 @@ $$
 ```{r include=FALSE}
 # Separate model:
 # Estimate intercept means:
-# recycled_intercept <- 680000*0.001 #US population in year 0  times 1kg (0.001 tonnes) 
+# recycled_intercept <- 680000*0.001 US population in year 0  times 1kg (0.001 tonnes) 
 # for clothing waste in a year per person
 # combusted_intercept <- 0
 # landfilled_intercept <- 0
@@ -483,20 +483,26 @@ h_yrep_l <- as.matrix(fit_hierarchical, pars = "yrep_l")
 y_c <- all_data[['Material combusted']]
 y_r <- all_data[['Materials recycled']]
 y_l <- all_data[['Materials landfilled']]
-p_dens <- ppc_dens_overlay(y_c[7:15], yrep = s_yrep_c[1:50,])
-p_hist <- ppc_hist(y_c[7:15], yrep = s_yrep_c[1:8,])
+p_dens <- ppc_dens_overlay(y_c[7:15], yrep = s_yrep_c[1:50,]) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0.5, hjust=0))
+p_hist <- ppc_hist(y_c[7:15], yrep = s_yrep_c[1:8,]) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0.5, hjust=0))
 plot_grid(p_dens, p_hist)
 ```
 
 ```{r rs-plot, fig.height=2, fig.width=7, fig.cap="Posterior predictive check for materials recycled with the separate model.", echo=FALSE, warning=FALSE}
-p_dens <- ppc_dens_overlay(y_r[7:15], yrep = s_yrep_r[1:50,])
-p_hist <- ppc_hist(y_r[7:15], yrep = s_yrep_r[1:8,])
+p_dens <- ppc_dens_overlay(y_r[7:15], yrep = s_yrep_r[1:50,]) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0.5, hjust=0))
+p_hist <- ppc_hist(y_r[7:15], yrep = s_yrep_r[1:8,]) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0.5, hjust=0))
 plot_grid(p_dens, p_hist)
 ```
 
 ```{r ls-plot, fig.height=2, fig.width=7, fig.cap="Posterior predictive check for materials landfilled with the separate model.", echo=FALSE, warning=FALSE}
-p_dens <- ppc_dens_overlay(y_l[7:15], yrep = s_yrep_l[1:50,])
-p_hist <- ppc_hist(y_l[7:15], yrep = s_yrep_l[1:8,])
+p_dens <- ppc_dens_overlay(y_l[7:15], yrep = s_yrep_l[1:50,]) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0.5, hjust=0))
+p_hist <- ppc_hist(y_l[7:15], yrep = s_yrep_l[1:8,]) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0.5, hjust=0))
 plot_grid(p_dens, p_hist)
 ```
 
@@ -507,24 +513,30 @@ Figures \@ref(fig:ch-plot), \@ref(fig:rh-plot), and \@ref(fig:lh-plot) show post
 For the initial model without a sigma prior, the fit was much worse. The distributions were clearly too wide, so a sigma prior was added (the final sigma prior is discussed in the Priors section). This made the fit much better.
 
 ```{r ch-plot, fig.height=2, fig.width=7, fig.cap="Posterior predictive check for materials combusted with the hierarchical model.", echo=FALSE, warning=FALSE}
-p_dens <- ppc_dens_overlay(y_c[7:15], yrep = h_yrep_c[1:50,])
-p_hist <- ppc_hist(y_c[7:15], yrep = h_yrep_c[1:8,])
+p_dens <- ppc_dens_overlay(y_c[7:15], yrep = h_yrep_c[1:50,]) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0.5, hjust=0))
+p_hist <- ppc_hist(y_c[7:15], yrep = h_yrep_c[1:8,]) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0.5, hjust=0))
 plot_grid(p_dens, p_hist)
 ```
 
 ```{r rh-plot, fig.height=2, fig.width=7, fig.cap="Posterior predictive check for materials recycled with the hierarchical model.", echo=FALSE, warning=FALSE}
-p_dens <- ppc_dens_overlay(y_r[7:15], yrep = h_yrep_r[1:50,])
-p_hist <- ppc_hist(y_r[7:15], yrep = h_yrep_r[1:8,])
+p_dens <- ppc_dens_overlay(y_r[7:15], yrep = h_yrep_r[1:50,]) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0.5, hjust=0))
+p_hist <- ppc_hist(y_r[7:15], yrep = h_yrep_r[1:8,]) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0.5, hjust=0))
 plot_grid(p_dens, p_hist)
 ```
 
 ```{r lh-plot, fig.height=2, fig.width=7, fig.cap="Posterior predictive check for materials landfilled with the hierarchical model.", echo=FALSE, warning=FALSE}
-p_dens <- ppc_dens_overlay(y_l[7:15], yrep = h_yrep_l[1:50,])
-p_hist <- ppc_hist(y_l[7:15], yrep = h_yrep_l[1:8,])
+p_dens <- ppc_dens_overlay(y_l[7:15], yrep = h_yrep_l[1:50,]) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0.5, hjust=0))
+p_hist <- ppc_hist(y_l[7:15], yrep = h_yrep_l[1:8,]) +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0.5, hjust=0))
 plot_grid(p_dens, p_hist)
 ```
 
-# Predictive performance assessment
+# Predictive performance assessment {#predictive-performance-assessment}
 
 To assess performance, we can fit the models excluding the year 2018, instead adding that year as the predicted year. We can then compare the true values for 2018 to the predicted values.
 
@@ -558,7 +570,7 @@ fit_hierarchical_perf <- stan(file = "Hierarchical_project.stan",
 fit_separate_perf <- stan(file = "Separate_project.stan", data = performance_data_separate)
 ```
 
-The results for this analysis can be seen in Table \@ref(tab:perf-asses-h) for the hierarchical model, and Table @ref(tab:perf-asses-s) for the separate model.
+The results for this analysis can be seen in Table \@ref(tab:perf-asses-h) for the hierarchical model, and Table \@ref(tab:perf-asses-s) for the separate model.
 
 ```{r perf-asses-h, echo=FALSE}
 ypred_r_h <- extract(fit_hierarchical_perf, 'ypred_r')
@@ -878,7 +890,8 @@ Sensitivity analysis for the separate model can be seen in Figure \@ref(fig:sep-
 ```{r sep-sens-plot, fig.height=4, fig.width=7, fig.cap="Sensitivity analysis for separate model. Prediction refers to 2019 prediction, and Replicate refers to the original dataset replicated with the model."}
 ggplot(data=sep_sens_df, aes(x=value, color = Prior)) +
   geom_density() +
-  facet_wrap(y_type ~ col_val, scales='free')
+  facet_wrap(y_type ~ col_val, scales='free') +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0.5, hjust=0))
 ```
 
 From the figure, we can see that the separate model is quite sensitive to prior choice. Although there isn't much difference between the effect of the final priors and the uniform prior, the "Second" prior makes quite a large difference.
@@ -890,7 +903,8 @@ Sensitivity analysis for the hierarchical model can be seen in Figure \@ref(fig:
 ```{r hier-sens-plot, fig.height=4, fig.width=7, fig.cap="Sensitivity analysis for hierarchical model. Prediction refers to 2019 prediction, and Replicate refers to the original dataset replicated with the model."}
 ggplot(data=hier_sens_df, aes(x=value, color = Prior)) +
   geom_density() +
-  facet_wrap(y_type ~ col_val, scales='free')
+  facet_wrap(y_type ~ col_val, scales='free') +
+  theme(axis.text.x = element_text(angle = -45, vjust = 0.5, hjust=0))
 ```
 
 From the figure, we can see that the hierarchical model is much less sensitive to prior choice than the separate model. For the predicted quantities the prior choice doesn't seem to have a significant effect, although the "Second" prior clearly results in a slightly narrower distribution than the others. For the replicated quantities, the prior choice doesn't have much effect on the "Landfilled" block, but the model seems more sensitive in the other blocks where the uniform prior is clearly causing some differences.
@@ -932,18 +946,26 @@ We can see that the separate model has a slightly larger elpd-value, hence the s
 
 # Discussion
 
-One area where this project could be improved is plotting. There were some issues with the formatting of the report and the scaling of the plots that could not be remedied in time. 
+One area where this project could be improved is plotting. There were some issues with the formatting of the report and the scaling of the plots that could not be remedied in time.
 
 Another aspect to be improved on would be the selection and cleaning of the dataset. Our chosen dataset has irregular time periods of data collection, and we had to account for this when designing our models. It would be preferable to have more data, that is grouped annually. 
+
+The fit of the model is made worse because of the small dataset, but we used our priors to try and mitigate that factor when ftting our models.
+
 # Conclusion
 
-Through the course of this project, we have gone through the process of fitting our [dataset](#the-final-data) to two Stan models, a hierarchical model and a separate model, both of which fit linear Gaussian models to the features. We compare the R-hat and ESS diagnostics of both models to see if they converge or not (they do.) We then use the HMC diagnostics to verify if random samples drawn from the posterior distribution converge. 
+Through the course of this project, we have gone through the process of fitting our [dataset](#the-final-data) to two Stan models, a hierarchical model and a separate model, both of which fit linear Gaussian models to the features. We compare the R-hat and ESS diagnostics of both models to see if they converge or not (they do.) We then use the HMC diagnostics to verify if random samples drawn from the posterior distribution converge.
 
 We used these metrics in the early stages of the project to troubleshoot model design and changed parts of our model to optimize for them. A [predictive performance assessment](#predictive-performance-assessment) was conducted to test if the model produced good predictions, where we predicted the data of year 2018, and compared it with the real values.
 
-We gained some insights in working with smaller datasets, and have observed that the smaller the dataset, the more important the priors are in building a good model. This highlights the importance of domain expertise, and has applications in fields with small datasets like the measurements of particle accelerators or the treatment outcomes of patients wth rare cancers.
+Our final finding is that the separate model fit the data better.
 
-In a future project, we could spend more time researching the topic and building up domain expertise to generate more informative priors, which have a very large impact on the performances of our models. We could also fit more models to our data and perform more in-depth cross validation of the models.
+We gained some insights in working with smaller datasets, and have observed that the smaller the dataset, the more important the priors are in building a good model. This highlights the importance of domain expertise, and has applications in fields with small datasets like the measurements of particle accelerators or the treatment outcomes of patients with rare cancers.
+
+In a future project, we could spend more time researching the topic and building up domain expertise to generate more informative priors, which have a very large impact on the performances of our models. We could also fit more models to our data and perform more in-depth cross validation of the models. 
+
 # Self reflection
+
+We learned how to combine everything learned in the assignments into the evaluation of chosen models with a real-world dataset. We also learned how to adapt various model evaluation methods to a model with several categories. There were some challenges like unclean data and coordinating between group members, but we learned a lot along the way, and are satisfied with the results of our labours.
 
 # References
